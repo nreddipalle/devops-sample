@@ -1,0 +1,537 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label: 
+        default: "Client & VPC Details"
+      Parameters: 
+      - VPCRegionStackName
+      - VPCGroupStackName
+      - "ClientName"
+    - Label: 
+        default: "ELB Details"
+      Parameters:       
+      - "CertificateName"
+      - "SSLPolicy"
+
+Parameters:
+  VPCRegionStackName:
+    Description: "Name of a VPC Region stack that contains the management vpc networking resources."
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: "^[a-zA-Z][-a-zA-Z0-9-]*$"
+    Default: "VPC-MGT"
+  VPCGroupStackName:
+    Description: "Name of a VPC Group stack that contains the group networking resources."
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: "^[a-zA-Z][-a-zA-Z0-9-_]*$"
+    Default: "VPC_1"
+  ClientName:
+    Description: "Client Name"
+    Default: "CName"
+    Type: String
+    MinLength: '1'
+    MaxLength: '11'  
+  CertificateName:
+    Description: "ACM Certificate ID to attach on ELB"
+    Default: "b6a5dd15-XXXX-XXXX"
+    Type: String
+    MinLength: '1'
+    MaxLength: '255'
+  SSLPolicy:
+    Description: "ELB SSL Policy"
+    Default: "ELBSecurityPolicy-TLS-1-2-2017-01"
+    Type: String
+    MinLength: '1'
+    MaxLength: '255'
+
+Resources:
+  # Staging ELB
+  myELBStaging:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub
+        - "${VpcName}-SLB-${ClientName}"
+        - VpcName:
+            Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCNAME"
+      Scheme: "internet-facing"
+      Subnets:
+        - Fn::ImportValue: !Sub "${VPCGroupStackName}-SUBNET-PUBLICA"
+        - Fn::ImportValue: !Sub "${VPCGroupStackName}-SUBNET-PUBLICB"
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '60'
+      SecurityGroups:
+        - Ref: mySGELBStaging
+        - Fn::ImportValue: !Sub "${VPCGroupStackName}-SGCloudFlare"
+      IpAddressType: "ipv4"
+      Tags:
+        - Key: "VPC Name"
+          Value: 
+            Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCNAME"
+        - Key: "customer"
+          Value: !Ref ClientName
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VPCGroupStackName
+
+  myELBTargetGroupStaging:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: "/login/ad"
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      Matcher: 
+        HttpCode: '200'
+      Name: !Sub
+        - "${VpcName}-SLBTG-${ClientName}"
+        - VpcName:
+           Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCNAME"
+      Port: 80
+      Protocol: HTTP
+      Tags:
+        - Key: "Name"
+          Value: !Sub
+            - "${VpcName}-SLBTG-${ClientName}"
+            - VpcName:
+                Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCNAME"
+        - Key: "VPC Name"
+          Value:
+            Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCNAME"
+        - Key: "customer"
+          Value: !Ref ClientName
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VPCGroupStackName
+      UnhealthyThresholdCount: 5
+      VpcId:
+        Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCID"
+
+  myELBListenerStaging:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties: 
+      Certificates:
+        - CertificateArn: !Sub "arn:aws:acm:${AWS::Region}:${AWS::AccountId}:certificate/${CertificateName}"
+      LoadBalancerArn: !Ref myELBStaging
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: !Ref SSLPolicy 
+      DefaultActions:
+        - TargetGroupArn: !Ref myELBTargetGroupStaging
+          Type: "forward"
+    #no tags
+
+
+  # Production ELB
+  myELBProduction:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub
+        - "${VpcName}-PLB-${ClientName}"
+        - VpcName:
+            Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCNAME"
+      Scheme: "internet-facing"
+      Subnets:
+        - Fn::ImportValue: !Sub "${VPCGroupStackName}-SUBNET-PUBLICA"
+        - Fn::ImportValue: !Sub "${VPCGroupStackName}-SUBNET-PUBLICB"
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '60'
+      SecurityGroups:
+        - Ref: mySGELBProduction
+        - Fn::ImportValue: !Sub "${VPCGroupStackName}-SGCloudFlare"
+      IpAddressType: "ipv4"
+      Tags:
+        - Key: "VPC Name"
+          Value:
+            Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCNAME"
+        - Key: "customer"
+          Value: !Ref ClientName
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VPCGroupStackName
+  myELBTargetGroupProduction:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: "/login/ad"
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      Matcher: 
+        HttpCode: '200'
+      Name: !Sub
+        - "${VpcName}-PLBTG-${ClientName}"
+        - VpcName:
+           Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCNAME"
+      Port: 80
+      Protocol: HTTP
+      Tags:
+        - Key: "Name"
+          Value: !Sub
+            - "${VpcName}-PLBTG-${ClientName}"
+            - VpcName:
+                Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCNAME"
+        - Key: "VPC Name"
+          Value: 
+            Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCNAME"
+        - Key: "customer"
+          Value: !Ref ClientName
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VPCGroupStackName
+      UnhealthyThresholdCount: 5
+      VpcId:
+        Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCID"
+  myELBListenerProduction:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties: 
+      Certificates:
+        - CertificateArn: !Sub "arn:aws:acm:${AWS::Region}:${AWS::AccountId}:certificate/${CertificateName}"
+      LoadBalancerArn: !Ref myELBProduction
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: !Ref SSLPolicy 
+      DefaultActions:
+        - TargetGroupArn: !Ref myELBTargetGroupProduction
+          Type: "forward"
+    #no tags
+
+  # IAM Role Per Client
+  myWebRole:
+    Type: "AWS::IAM::Role"
+    Properties: 
+      RoleName: !Sub 
+        - "${VpcName}-ROLE-WEB-${ClientName}-${AWS::Region}"
+        - VpcName:
+            Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCNAME"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "ec2.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM"
+        - "arn:aws:iam::policy/pdf-lambda-user-permission"
+      Policies:
+        - PolicyName: "Grant-S3-Access"
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+              - Effect: "Allow"
+                Action: 
+                  - "s3:GetBucketLocation"
+                  - "s3:ListAllMyBuckets"
+                Resource: "arn:aws:s3:::*"
+              - Effect: "Allow"
+                Action: 
+                  - "s3:ListBucket"
+                Resource: 
+                  - "arn:aws:s3:::build"
+              - Effect: "Allow"
+                Action: 
+                  - "s3:GetObject"
+                Resource: 
+                  - "arn:aws:s3:::build/*"
+        - PolicyName: "Grant-ELB-Access"
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+              - Effect: "Allow"
+                Action: 
+                  - "elasticloadbalancing:RegisterTargets"
+                  - "elasticloadbalancing:DeregisterTargets"
+                  - "elasticloadbalancing:DescribeTargetHealth"
+                  - "elasticloadbalancing:DescribeTargetGroups"
+                Resource: "*"
+              - Effect: "Allow"
+                Action: 
+                  - "elasticloadbalancing:DescribeLoadBalancers"
+                  - "elasticloadbalancing:ApplySecurityGroupsToLoadBalancer"
+                Resource: 
+                  - "*"
+        - PolicyName: "Grant-EC2-Tags"
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+              - Effect: "Allow"
+                Action: 
+                  - "ec2:*"
+                Resource: "*"
+        - PolicyName: "Grant-SSM-Access"
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+              - Effect: "Allow"
+                Action: 
+                  - "ssm:*"
+                Resource: "*"
+        - PolicyName: "Grant-EC2-Tags-Read-Access"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "ec2:DescribeInstances"
+                  - "ec2:DescribeTags"
+                Resource: "*"
+        # - PolicyName: "Grant-KMS-Access"
+        #   PolicyDocument: 
+        #     Version: "2012-10-17"
+        #     Statement: 
+        #       - Effect: "Allow"
+        #         Action: 
+        #           - "kms:Encrypt"
+        #           - "kms:Decrypt"
+        #           - "kms:ReEncrypt*"
+        #           - "kms:GenerateDataKey*"
+        #           - "kms:DescribeKey"
+        #         Resource: "*"
+        #       - Effect: "Allow"
+        #         Action: 
+        #           - "kms:CreateGrant"
+        #           - "kms:ListGrants"
+        #           - "kms:RevokeGrant"
+        #         Resource: "*"
+        #         # Condition:
+        #         #   Bool:
+        #         #     - "kms:GrantIsForAWSResource": "true"
+      #no tags
+
+  myWebInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties: 
+      Path: "/"
+      Roles:
+        - !Ref myWebRole
+      InstanceProfileName: !Sub 
+        - "${VpcName}-ROLE-WEB-${ClientName}-${AWS::Region}"
+        - VpcName:
+            Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCNAME"
+    #no tags
+
+  # Security Groups Per Client
+  mySGELBStaging:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties: 
+      GroupName: !Sub 
+        - "${VpcName}-SG-ELB-STAGING-${ClientName}"
+        - VpcName:
+            Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCNAME"
+      GroupDescription: "Security group for ELB Staging Servers"
+      SecurityGroupEgress:
+        - CidrIp: "0.0.0.0/0"
+          IpProtocol: "-1"
+      SecurityGroupIngress: 
+        -
+          IpProtocol: "tcp"
+          FromPort: "443"
+          ToPort: "443"
+          CidrIp: "38.99.136.178/32"
+      Tags:
+        - Key: "Name"
+          Value: !Sub 
+            - "${VpcName}-SG-ELB-STAGING-${ClientName}"
+            - VpcName:
+                Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCNAME"
+        - Key: "customer"
+          Value: !Ref ClientName
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VPCGroupStackName
+      VpcId:
+        Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCID"
+
+  mySGELBProduction:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties: 
+      GroupName: !Sub 
+        - "${VpcName}-SG-ELB-PRODUCTION-${ClientName}"
+        - VpcName:
+            Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCNAME"
+      GroupDescription: "Security group for ELB Production Servers"
+      SecurityGroupEgress:
+        - CidrIp: "0.0.0.0/0"
+          IpProtocol: "-1"
+      SecurityGroupIngress: 
+        -
+          IpProtocol: "tcp"
+          FromPort: "443"
+          ToPort: "443"
+          CidrIp: "38.99.136.178/32"
+      Tags:
+        - Key: "Name"
+          Value: !Sub 
+            - "${VpcName}-SG-ELB-PRODUCTION-${ClientName}"
+            - VpcName:
+                Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCNAME"
+        - Key: "customer"
+          Value: !Ref ClientName
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VPCGroupStackName
+      VpcId:
+        Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCID"
+
+  mySGWeb:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties: 
+      GroupName: !Sub 
+        - "${VpcName}-SG-WEB-${ClientName}"
+        - VpcName:
+            Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCNAME"
+      GroupDescription: "Security group for Web Servers"
+      SecurityGroupEgress:
+        - CidrIp: "0.0.0.0/0"
+          IpProtocol: "-1"
+      SecurityGroupIngress: 
+        -
+          IpProtocol: "tcp"
+          FromPort: "5000"
+          ToPort: "5100"
+          SourceSecurityGroupId:
+            Fn::ImportValue: !Sub "${VPCGroupStackName}-SGDB"
+        -
+          IpProtocol: "tcp"
+          FromPort: "135"
+          ToPort: "135"
+          SourceSecurityGroupId:
+            Fn::ImportValue: !Sub "${VPCGroupStackName}-SGDB"
+        -
+          IpProtocol: "-1"
+          FromPort: "-1"
+          ToPort: "-1"
+          SourceSecurityGroupId:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-SGMGTVPNID"
+        -
+          IpProtocol: "-1"
+          FromPort: "-1"
+          ToPort: "-1"
+          SourceSecurityGroupId:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-SGMGTID"        
+        - 
+          IpProtocol: "tcp"
+          FromPort: "6300"
+          ToPort: "6500"
+          SourceSecurityGroupId:
+            Fn::ImportValue: !Sub "${VPCGroupStackName}-SGRedis"
+      # SecurityGroupIngress: 
+      #   -
+      #     IpProtocol: "https"
+      #     FromPort: "443"
+      #     ToPort: "443"
+      #     SourceSecurityGroupId: !Ref mySGELBProduction
+      #   -
+      #     IpProtocol: "http"
+      #     FromPort: "80"
+      #     ToPort: "80"
+      #     SourceSecurityGroupId: !Ref mySGELBProduction
+      Tags:
+        - Key: "Name"
+          Value: !Sub 
+            - "${VpcName}-SG-WEB-${ClientName}"
+            - VpcName:
+                Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCNAME"
+        - Key: "customer"
+          Value: !Ref ClientName
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VPCGroupStackName
+      VpcId:
+        Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCID"
+
+  mySGDBIngress3:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    Properties:
+      GroupId: 
+        Fn::ImportValue: !Sub "${VPCGroupStackName}-SGDB"
+      IpProtocol: "tcp"
+      FromPort: "1433"
+      ToPort: "1433"
+      SourceSecurityGroupId: !Ref mySGWeb
+    #no tags
+  mySGDBIngress4:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    Properties:
+      GroupId:
+        Fn::ImportValue: !Sub "${VPCGroupStackName}-SGDB"
+      IpProtocol: "tcp"
+      FromPort: "5000"
+      ToPort: "5100"
+      SourceSecurityGroupId: !Ref mySGWeb
+    #no tags
+  mySGDBIngress5:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    Properties:
+      GroupId:
+        Fn::ImportValue: !Sub "${VPCGroupStackName}-SGDB"
+      IpProtocol: "tcp"
+      FromPort: "135"
+      ToPort: "135"
+      SourceSecurityGroupId: !Ref mySGWeb   
+  
+
+  TranscodingPipelineQueue:
+    Type: "AWS::SQS::Queue"
+    Properties:
+      QueueName: !Sub "${ClientName}-TransCoding"
+      # No Support for tags
+      # Tags:
+      #   - Key: "customer"
+      #     Value: !Ref ClientName
+      #   - Key: "environment"
+      #     Value:
+      #       Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+
+Outputs: 
+  WebInstanceProfile:
+    Description: "The IAM Web Instance Profile"
+    Value: !GetAtt ["myWebInstanceProfile", "Arn"]
+    Export:
+      Name: !Sub "${AWS::StackName}-WebInstanceARN"
+  SGWeb:
+    Description: "The security group ID to use for Web Server"
+    Value:
+      !GetAtt ["mySGWeb", "GroupId"]
+    Export: 
+      Name: !Sub "${AWS::StackName}-SGWeb"
+  ClientName:
+    Description: "The name of the client"
+    Value: !Ref ClientName
+    Export: 
+      Name: !Sub "${AWS::StackName}-ClientName"
+  StagingAlb:
+    Description: "The staging load balancer"
+    Value: !Ref myELBStaging
+    Export:
+      Name: !Sub "${AWS::StackName}-StagingAlb"
+  ProdAlb:
+    Description: "The production load balancer"
+    Value: !Ref myELBProduction
+    Export:
+      Name: !Sub "${AWS::StackName}-ProdAlb"

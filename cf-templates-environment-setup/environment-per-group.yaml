@@ -1,0 +1,994 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  VPCRegionStackName:
+    Description: "Name of a VPC Region stack that contains the management vpc networking resources."
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: "^[a-zA-Z][-a-zA-Z0-9-]*$"
+    Default: "VPC-MGT"
+  VPCRegionADStackName:
+    Description: "Name of a VPC Region stack that contains the management vpc Active Directory resources."
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: "^[a-zA-Z][-a-zA-Z0-9-]*$"
+    Default: "VPC-MGT-AD"
+  VpcName:
+    Description: "Vpc Name"
+    Default: "VPC-1"
+    Type: String
+    MinLength: '1'
+    MaxLength: '11'
+  VPCCidrBlockPrefix:
+    Description: "VPC Prefix for Cidr Block (Uses 172.32.0.0/20)"
+    Default: "172.16.48.0"
+    AllowedValues:
+      - "172.16.0.0"
+      - "172.16.16.0"
+      - "172.16.32.0"
+      - "172.16.48.0"
+      - "172.16.64.0"
+      - "172.16.80.0"
+      - "172.16.96.0"
+      - "172.16.112.0"
+      - "172.16.128.0"
+      - "172.16.144.0"
+      - "172.16.160.0"
+      - "172.16.176.0"
+      - "172.16.192.0"
+      - "172.16.208.0"
+      - "172.16.224.0"
+    Type: String
+    MinLength: '1'
+    MaxLength: '255'
+  AvailabilityZone1:
+    Description: "Availability Zone 1"
+    Default: "us-west-2a"
+    Type: "AWS::EC2::AvailabilityZone::Name"
+    MinLength: '1'
+    MaxLength: '255'
+  AvailabilityZone2:
+    Description: "Availability Zone 2"
+    Default: "us-west-2b"
+    Type: "AWS::EC2::AvailabilityZone::Name"
+    MinLength: '1'
+    MaxLength: '255'
+  EnvType:
+    Description: "Environment"
+    Default: "production"
+    AllowedValues:
+      - "sandbox"
+      - "production"
+    Type: String
+    MinLength: '1'
+    MaxLength: '255'
+
+Conditions:
+  IsSandbox: !Equals [!Ref EnvType, sandbox]
+
+Mappings:  
+  CIDRBlockMappings:
+    "172.16.0.0":
+      WEBA:   "172.16.0.0/24"
+      WEBB:   "172.16.1.0/24"
+      DBA:    "172.16.2.0/24"
+      DBB:    "172.16.3.0/24"      
+    "172.16.16.0":
+      WEBA:   "172.16.16.0/24"
+      WEBB:   "172.16.17.0/24"
+      DBA:    "172.16.18.0/24"
+      DBB:    "172.16.19.0/24"      
+    "172.16.32.0":
+      WEBA:   "172.16.32.0/24"
+      WEBB:   "172.16.33.0/24"
+      DBA:    "172.16.34.0/24"
+      DBB:    "172.16.35.0/24"      
+    "172.16.48.0":
+      WEBA:   "172.16.48.0/24"
+      WEBB:   "172.16.49.0/24"
+      DBA:    "172.16.50.0/24"
+      DBB:    "172.16.51.0/24"      
+    "172.16.64.0":
+      WEBA:   "172.16.64.0/24"
+      WEBB:   "172.16.65.0/24"
+      DBA:    "172.16.66.0/24"
+      DBB:    "172.16.67.0/24"     
+    "172.16.80.0":
+      WEBA:   "172.16.80.0/24"
+      WEBB:   "172.16.81.0/24"
+      DBA:    "172.16.82.0/24"
+      DBB:    "172.16.83.0/24"     
+    "172.16.96.0":
+      WEBA:   "172.16.96.0/24"
+      WEBB:   "172.16.97.0/24"
+      DBA:    "172.16.98.0/24"
+      DBB:    "172.16.99.0/24"      
+    "172.16.112.0":
+      WEBA:   "172.16.112.0/24"
+      WEBB:   "172.16.113.0/24"
+      DBA:    "172.16.114.0/24"
+      DBB:    "172.16.115.0/24"      
+    "172.16.128.0":
+      WEBA:   "172.16.128.0/24"
+      WEBB:   "172.16.129.0/24"
+      DBA:    "172.16.130.0/24"
+      DBB:    "172.16.131.0/24"      
+    "172.16.144.0":
+      WEBA:   "172.16.144.0/24"
+      WEBB:   "172.16.145.0/24"
+      DBA:    "172.16.146.0/24"
+      DBB:    "172.16.147.0/24"      
+    "172.16.160.0":
+      WEBA:   "172.16.160.0/24"
+      WEBB:   "172.16.161.0/24"
+      DBA:    "172.16.162.0/24"
+      DBB:    "172.16.163.0/24"     
+    "172.16.176.0":
+      WEBA:   "172.16.176.0/24"
+      WEBB:   "172.16.177.0/24"
+      DBA:    "172.16.178.0/24"
+      DBB:    "172.16.179.0/24"      
+    "172.16.192.0":
+      WEBA:   "172.16.192.0/24"
+      WEBB:   "172.16.193.0/24"
+      DBA:    "172.16.194.0/24"
+      DBB:    "172.16.195.0/24"      
+    "172.16.208.0":
+      WEBA:   "172.16.208.0/24"
+      WEBB:   "172.16.209.0/24"
+      DBA:    "172.16.210.0/24"
+      DBB:    "172.16.211.0/24"      
+    "172.16.224.0":
+      WEBA:   "172.16.224.0/24"
+      WEBB:   "172.16.225.0/24"
+      DBA:    "172.16.226.0/24"
+      DBB:    "172.16.227.0/24"      
+
+Resources:
+  # ###############
+  # # VPC Configuration
+  myVPC:
+    Type: "AWS::EC2::VPC"
+    Properties: 
+      CidrBlock: !Sub "${VPCCidrBlockPrefix}/20"
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: "default"
+      Tags:
+        - Key: "Name"
+          Value: !Ref VpcName
+        - Key: "customer"
+          Value: "shared"
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VpcName
+
+  myVPCDHCPAssociation:
+    Type: "AWS::EC2::VPCDHCPOptionsAssociation"
+    Properties: 
+      DhcpOptionsId:
+        Fn::ImportValue: !Sub "${VPCRegionADStackName}-DhcpOptionsId"
+      VpcId: !Ref myVPC
+    #no tags
+
+  ###############
+  # Subnet Configuration
+  myVPCSubDBA:
+    Type: "AWS::EC2::Subnet"
+    Properties: 
+      AvailabilityZone: !Ref AvailabilityZone1
+      CidrBlock: !FindInMap [CIDRBlockMappings, !Ref VPCCidrBlockPrefix, "DBA"]
+      MapPublicIpOnLaunch: "false"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-SUB-DB-A"
+        - Key: "customer"
+          Value: "shared"
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VpcName
+      VpcId: !Ref myVPC
+
+  myVPCSubDBB:
+    Type: "AWS::EC2::Subnet"
+    Properties: 
+      AvailabilityZone: !Ref AvailabilityZone2
+      CidrBlock: !FindInMap [CIDRBlockMappings, !Ref VPCCidrBlockPrefix, "DBB"]
+      MapPublicIpOnLaunch: "false"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-SUB-DB-B"
+        - Key: "customer"
+          Value: "shared"
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VpcName
+      VpcId: !Ref myVPC 
+
+  myVPCSubWebA:
+    Type: "AWS::EC2::Subnet"
+    Properties: 
+      AvailabilityZone: !Ref AvailabilityZone1
+      CidrBlock: !FindInMap [CIDRBlockMappings, !Ref VPCCidrBlockPrefix, "WEBA"]
+      MapPublicIpOnLaunch: "false"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-SUB-WEB-A"
+        - Key: "customer"
+          Value: "shared"
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VpcName
+      VpcId: !Ref myVPC
+
+  myVPCSubWebB:
+    Type: "AWS::EC2::Subnet"
+    Properties: 
+      AvailabilityZone: !Ref AvailabilityZone2
+      CidrBlock: !FindInMap [CIDRBlockMappings, !Ref VPCCidrBlockPrefix, "WEBB"]
+      MapPublicIpOnLaunch: "false"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-SUB-WEB-B"
+        - Key: "customer"
+          Value: "shared"
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VpcName
+      VpcId: !Ref myVPC
+
+  myVPCSubPublicA:
+    Type: "AWS::EC2::Subnet"
+    Properties: 
+      AvailabilityZone: !Ref AvailabilityZone1
+      CidrBlock: !FindInMap [CIDRBlockMappings, !Ref VPCCidrBlockPrefix, "PUBLICA"]
+      MapPublicIpOnLaunch: "false"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-SUB-PUBLIC-A"
+        - Key: "customer"
+          Value: "shared"
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VpcName
+      VpcId: !Ref myVPC
+   
+  myVPCSubPublicB:
+    Type: "AWS::EC2::Subnet"
+    Properties: 
+      AvailabilityZone: !Ref AvailabilityZone2
+      CidrBlock: !FindInMap [CIDRBlockMappings, !Ref VPCCidrBlockPrefix, "PUBLICB"]
+      MapPublicIpOnLaunch: "false"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-SUB-PUBLIC-B"
+        - Key: "customer"
+          Value: "shared"
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VpcName
+      VpcId: !Ref myVPC  
+
+  ###############
+  # Internet Gateway Configuration
+  myVPCInternetGateway:
+    Type: "AWS::EC2::InternetGateway"
+    Properties: 
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-IG"
+        - Key: "customer"
+          Value: "shared"
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VpcName
+
+  myVPCGatewayAttachment:
+    Type: "AWS::EC2::VPCGatewayAttachment"
+    Properties: 
+      InternetGatewayId: !Ref myVPCInternetGateway
+      VpcId: !Ref myVPC
+    #no tags
+    
+  ###############
+  # EIP for two NAT Gateway(s) in two Availability Zones
+  myEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: ${VpcName} 
+    #no tags
+  
+  myEIP2:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: ${VpcName}
+    #no tags
+
+  ###############
+  # NAT Gateway Configuration in PublicA
+  myVPCNATGatewayA:
+    DependsOn: myEIP
+    Type: "AWS::EC2::NatGateway"
+    Properties: 
+      AllocationId: 
+        Fn::GetAtt:
+        - myEIP
+        - AllocationId               
+      Tags:
+        - Key: "Name"          
+          Value: !Sub "${VpcName}-NG-A"  
+        - Key: "customer"
+          Value: "shared"
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VpcName
+      SubnetId: !Ref myVPCSubPublicA   
+
+  # NAT Gateway Configuration in PublicB
+  myVPCNATGatewayB:
+    DependsOn: myEIP2
+    Type: "AWS::EC2::NatGateway"
+    Properties: 
+      AllocationId: 
+        Fn::GetAtt:
+        - myEIP2
+        - AllocationId               
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-NG-B"  
+        - Key: "customer"
+          Value: "shared"
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VpcName
+      SubnetId: !Ref myVPCSubPublicB  
+
+  ###############
+  # Public Route Table Configuration
+  myVPCPublicRouteTable:
+    Type: "AWS::EC2::RouteTable"
+    Properties: 
+      VpcId: !Ref myVPC
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-ROUTE-PUBLIC"
+        - Key: "customer"
+          Value: "shared"
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VpcName
+
+  myVPCRouteIG:
+    DependsOn: myVPCGatewayAttachment
+    Type: "AWS::EC2::Route"
+    Properties: 
+      RouteTableId: !Ref myVPCPublicRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref myVPCInternetGateway
+    #no tag
+
+  ############################################
+  # Private Route Table Configuration in AZ-A
+  myVPCPrivateRouteTableA:
+    Type: "AWS::EC2::RouteTable"
+    Properties: 
+      VpcId: !Ref myVPC
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-ROUTE-PRIVATE-A"
+        - Key: "customer"
+          Value: "shared"
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VpcName
+
+  myVPCRouteNGA:
+    DependsOn: myVPCNATGatewayA
+    Type: "AWS::EC2::Route"
+    Properties: 
+      RouteTableId: !Ref myVPCPrivateRouteTableA
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref myVPCNATGatewayA
+    #no tag
+
+  ############################################
+  # Private Route Table Configuration in AZ-B
+  myVPCPrivateRouteTableB:
+    Type: "AWS::EC2::RouteTable"
+    Properties: 
+      VpcId: !Ref myVPC
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-ROUTE-PRIVATE-B"
+        - Key: "customer"
+          Value: "shared"
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VpcName
+
+  myVPCRouteNGB:
+    DependsOn: myVPCNATGatewayB
+    Type: "AWS::EC2::Route"
+    Properties: 
+      RouteTableId: !Ref myVPCPrivateRouteTableB
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref myVPCNATGatewayB
+    #no tag
+
+  ###############
+  # Peering Configuration
+  myVPCPeeringConnection:
+    Type: "AWS::EC2::VPCPeeringConnection"
+    Properties: 
+      PeerVpcId: !Ref myVPC
+      VpcId:
+        Fn::ImportValue: !Sub "${VPCRegionStackName}-VPCID"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "BETWEEN-${VpcName}-AND-VPC-MGT"
+        - Key: "customer"
+          Value: "shared"
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VpcName
+
+  myVPCPrivateRoutePeerConnectionA:
+    Type: "AWS::EC2::Route"
+    Properties: 
+      RouteTableId: !Ref myVPCPrivateRouteTableA
+      VpcPeeringConnectionId: !Ref myVPCPeeringConnection
+      DestinationCidrBlock:
+        Fn::ImportValue: !Sub "${VPCRegionStackName}-VPCCidrBlock"
+    #no tag
+
+  myVPCPrivateRoutePeerConnectionB:
+    Type: "AWS::EC2::Route"
+    Properties: 
+      RouteTableId: !Ref myVPCPrivateRouteTableB
+      VpcPeeringConnectionId: !Ref myVPCPeeringConnection
+      DestinationCidrBlock:
+        Fn::ImportValue: !Sub "${VPCRegionStackName}-VPCCidrBlock"
+    #no tag
+
+  myVPCPublicRoutePeerConnection:
+    Type: "AWS::EC2::Route"
+    Properties: 
+      RouteTableId: !Ref myVPCPublicRouteTable
+      VpcPeeringConnectionId: !Ref myVPCPeeringConnection
+      DestinationCidrBlock:
+        Fn::ImportValue: !Sub "${VPCRegionStackName}-VPCCidrBlock"
+    #no tag
+
+  #Adding an entry to Management Public RouteTable
+  myMgmtVPCPublicRoutePeerConnection:
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId: 
+        Fn::ImportValue: !Sub "${VPCRegionStackName}-VPCPublicRouteTableId" 
+      VpcPeeringConnectionId: !Ref myVPCPeeringConnection
+      DestinationCidrBlock: !Sub "${VPCCidrBlockPrefix}/20"
+
+  myVPCRoutePeerConnection2:
+    Type: "AWS::EC2::Route"
+    Properties: 
+      RouteTableId:
+        Fn::ImportValue: !Sub "${VPCRegionStackName}-VPCPrivateRouteTableIdA"
+      VpcPeeringConnectionId: !Ref myVPCPeeringConnection
+      DestinationCidrBlock: !Sub "${VPCCidrBlockPrefix}/20"
+
+  myVPCRoutePeerConnection3:
+    Type: "AWS::EC2::Route"
+    Properties: 
+      RouteTableId:
+        Fn::ImportValue: !Sub "${VPCRegionStackName}-VPCPrivateRouteTableIdB"
+      VpcPeeringConnectionId: !Ref myVPCPeeringConnection
+      DestinationCidrBlock: !Sub "${VPCCidrBlockPrefix}/20"
+    #no tag
+
+  ###############
+  # Subnet to Route Table Configuration
+  myVPCSubDBASubnetAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties: 
+      RouteTableId: !Ref myVPCPrivateRouteTableA
+      SubnetId: !Ref myVPCSubDBA
+    #no tag
+
+  myVPCSubDBBSubnetAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties: 
+      RouteTableId: !Ref myVPCPrivateRouteTableB
+      SubnetId: !Ref myVPCSubDBB
+    #no tag  
+
+  myVPCSubWebASubnetAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties: 
+      RouteTableId: !Ref myVPCPrivateRouteTableA
+      SubnetId: !Ref myVPCSubWebA
+    #no tag
+
+  myVPCSubWebBSubnetAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties: 
+      RouteTableId: !Ref myVPCPrivateRouteTableB
+      SubnetId: !Ref myVPCSubWebB
+    #no tag
+
+  myVPCSubPublicASubnetAssociation:
+   Type: "AWS::EC2::SubnetRouteTableAssociation"
+   Properties: 
+      RouteTableId: !Ref myVPCPublicRouteTable
+      SubnetId: !Ref myVPCSubPublicA
+    #no tag
+
+  myVPCSubPublicBSubnetAssociation:
+   Type: "AWS::EC2::SubnetRouteTableAssociation"
+   Properties: 
+      RouteTableId: !Ref myVPCPublicRouteTable
+      SubnetId: !Ref myVPCSubPublicB    
+
+  ###############
+  # VPC Endpoints
+  S3Endpoint:
+    Type: 'AWS::EC2::VPCEndpoint' 
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+              - Effect: "Allow"
+                Principal: '*'
+                Action: 
+                  - "s3:GetBucketLocation"
+                  - "s3:ListAllMyBuckets"
+                  - "s3:ListBucket"
+                  - "s3:GetObject"
+                  - "s3:PutObject"
+                Resource: 
+                  - "arn:aws:s3:::*"                               
+      RouteTableIds:
+        - !Ref myVPCPrivateRouteTableA
+        - !Ref myVPCPrivateRouteTableB
+        - !Ref myVPCPublicRouteTable
+      ServiceName: !Join 
+        - ''
+        - - com.amazonaws.
+          - !Ref 'AWS::Region'
+          - .s3
+      VpcId: !Ref myVPC
+    #no tags
+
+  ###############
+  # IAM Roles Configuration 
+  # - NOTE:: IAM roles are global from VPC, so ensure names are unique
+  myOpsworksServiceRole:
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2008-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "opsworks.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        - PolicyName: "Grant-Opsworks-Service-Access"
+          PolicyDocument: 
+            Statement: 
+              - Effect: "Allow"
+                Action: 
+                  - "ec2:*"
+                  - "iam:PassRole"
+                  - "cloudwatch:GetMetricStatistics"
+                  - "cloudwatch:DescribeAlarms"
+                  - "ecs:*"
+                  - "elasticloadbalancing:*"
+                  - "rds:*"
+                Resource: 
+                  - "*"
+      RoleName: !Sub "${VpcName}-ROLE-OPSWORKS-SERVICE-${AWS::Region}"
+    
+
+  # - NOTE:: IAM roles are global from VPC, so ensure names are unique
+  myDBRole:
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "ec2.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM"
+      Policies:
+        - PolicyName: "Grant-S3-Access"
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+              - Effect: "Allow"
+                Action: 
+                  - "s3:GetBucketLocation"
+                  - "s3:ListAllMyBuckets"
+                Resource: "arn:aws:s3:::*"
+              - Effect: "Allow"
+                Action: 
+                  - "s3:ListBucket"
+                Resource: 
+                  - !If [IsSandbox, "arn:aws:s3:::sandbox-build", "arn:aws:s3:::build"]
+                  - !If [IsSandbox, "arn:aws:s3:::sandbox-common", "arn:aws:s3:::common"]
+              - Effect: "Allow"
+                Action: 
+                  - "s3:GetObject"
+                Resource: 
+                 - !If [IsSandbox, "arn:aws:s3:::sandbox-build/*", "arn:aws:s3:::build/*"]
+                  - !If [IsSandbox, "arn:aws:s3:::sandbox-common/*", "arn:aws:s3:::common/*"]
+              - Effect: "Allow"
+                Action: 
+                  - "s3:PutObject"
+                Resource: 
+                  - !If [IsSandbox, "arn:aws:s3:::sandbox-build/baseline/dbs/*", "arn:aws:s3:::build/baseline/dbs/*"]
+        - PolicyName: "Grant-SSM-Access"
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+              - Effect: "Allow"
+                Action: 
+                  - "ssm:*"
+                Resource: "*"
+        - PolicyName: "Grant-EC2-Tags-Read-Access"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "ec2:DescribeInstances"
+                  - "ec2:DescribeTags"
+                Resource: "*"
+      RoleName: !Sub "${VpcName}-ROLE-DB-${AWS::Region}"   
+
+  myDBInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties: 
+      Path: "/"
+      Roles:
+        - !Ref myDBRole
+      InstanceProfileName: !Sub "${VpcName}-ROLE-DB-${AWS::Region}"  
+
+  ###############
+  # Security Groups Configuration  
+  mySGCloudFlare:
+    Type: "AWS::EC2::SecurityGroup"
+    DependsOn: myVPCPeeringConnection
+    Properties: 
+      GroupName: !Sub "${VpcName}-SG-CLOUDFLARE"
+      GroupDescription: "Security group for CloudFlare Servers"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-SG-CLOUDFLARE"
+        - Key: "customer"
+          Value: "shared"
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VpcName
+      SecurityGroupEgress:
+        - CidrIp: "0.0.0.0/0"
+          IpProtocol: "-1"
+      SecurityGroupIngress: 
+        -
+          IpProtocol: "tcp"
+          FromPort: "443"
+          ToPort: "443"
+          CidrIp: "103.21.244.0/22"
+        -
+          IpProtocol: "tcp"
+          FromPort: "443"
+          ToPort: "443"
+          CidrIp: "103.22.200.0/22"
+        -
+          IpProtocol: "tcp"
+          FromPort: "443"
+          ToPort: "443"
+          CidrIp: "103.31.4.0/22"
+        -
+          IpProtocol: "tcp"
+          FromPort: "443"
+          ToPort: "443"
+          CidrIp: "104.16.0.0/12"
+        -
+          IpProtocol: "tcp"
+          FromPort: "443"
+          ToPort: "443"
+          CidrIp: "108.162.192.0/18"
+        -
+          IpProtocol: "tcp"
+          FromPort: "443"
+          ToPort: "443"
+          CidrIp: "131.0.72.0/22"
+        -
+          IpProtocol: "tcp"
+          FromPort: "443"
+          ToPort: "443"
+          CidrIp: "141.101.64.0/18"
+        -
+          IpProtocol: "tcp"
+          FromPort: "443"
+          ToPort: "443"
+          CidrIp: "162.158.0.0/15"
+        -
+          IpProtocol: "tcp"
+          FromPort: "443"
+          ToPort: "443"
+          CidrIp: "172.64.0.0/13"
+        -
+          IpProtocol: "tcp"
+          FromPort: "443"
+          ToPort: "443"
+          CidrIp: "173.245.48.0/20"
+        -
+          IpProtocol: "tcp"
+          FromPort: "443"
+          ToPort: "443"
+          CidrIp: "188.114.96.0/20"
+        -
+          IpProtocol: "tcp"
+          FromPort: "443"
+          ToPort: "443"
+          CidrIp: "190.93.240.0/20"
+        -
+          IpProtocol: "tcp"
+          FromPort: "443"
+          ToPort: "443"
+          CidrIp: "197.234.240.0/22"
+        -
+          IpProtocol: "tcp"
+          FromPort: "443"
+          ToPort: "443"
+          CidrIp: "198.41.128.0/17"
+        -
+          IpProtocol: "tcp"
+          FromPort: "443"
+          ToPort: "443"
+          CidrIp: "199.27.128.0/21"
+      VpcId: !Ref myVPC
+
+  mySGDB:
+    Type: "AWS::EC2::SecurityGroup"
+    DependsOn: myVPCPeeringConnection
+    Properties:
+      GroupName: !Sub "${VpcName}-SG-DB"
+      GroupDescription: "Security group for DB Servers"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-SG-DB"
+        - Key: "customer"
+          Value: "shared"
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VpcName
+      SecurityGroupEgress:
+        - CidrIp: "0.0.0.0/0"
+          IpProtocol: "-1"
+      SecurityGroupIngress: 
+        -
+          IpProtocol: "-1"
+          SourceSecurityGroupId:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-SGMGTID"
+          FromPort: "-1"
+          ToPort: "-1"
+        -
+          IpProtocol: "-1"
+          SourceSecurityGroupId:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-SGMGTVPNID"
+          FromPort: "-1"
+          ToPort: "-1"
+        # uzone
+        -
+          CidrIp: "10.10.0.0/16"
+          IpProtocol: "-1"
+        -
+          CidrIp: "10.68.0.10/32"
+          IpProtocol: "-1"
+      VpcId: !Ref myVPC
+
+  # TODO: DO I NEED ALL INCOMING FROM DB BACK TO DB?
+  mySGDBIngress1:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: "mySGDB"
+    Properties:
+      GroupId: !Ref mySGDB
+      IpProtocol: "-1"
+      SourceSecurityGroupId: !Ref mySGDB
+    #no tags 
+  
+  mySGDBIngressForELB:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    DependsOn: "mySGDB"
+    Properties: 
+      GroupId: !Ref mySGDB
+      Description: "FOR INTERNAL DATABASE ELB"
+      IpProtocol: "tcp"
+      FromPort: "1433"
+      ToPort: "1433"
+      CidrIp: !Sub "${VPCCidrBlockPrefix}/20"
+    #no tags  
+
+  mySGGenericServer:
+    Type: "AWS::EC2::SecurityGroup"
+    DependsOn: myVPCPeeringConnection
+    Properties:
+      GroupName: !Sub "${VpcName}-SG-CUSTOM-SERVER"
+      GroupDescription: "Security group for ALL Servers"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${VpcName}-SG-CUSTOM-SERVER"
+        - Key: "customer"
+          Value: "shared"
+        - Key: "environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: "cluster"
+          Value: !Ref VpcName
+      SecurityGroupIngress: 
+        -
+          CidrIp: "172.16.0.0/16"
+          IpProtocol: "tcp"
+          FromPort: "80"
+          ToPort: "80"
+        -
+          CidrIp: "172.16.0.0/16"
+          IpProtocol: "tcp"
+          FromPort: "443"
+          ToPort: "443"
+        -
+          CidrIp: "172.16.0.0/16"
+          IpProtocol: "tcp"
+          FromPort: "22"
+          ToPort: "22"
+        -
+          CidrIp: "172.16.0.0/16"
+          IpProtocol: "icmp"
+          FromPort: "-1"
+          ToPort: "-1"
+        -
+          CidrIp: "135.23.65.186/32"
+          IpProtocol: "tcp"
+          FromPort: "3389"
+          ToPort: "3389"
+        -
+          CidrIp: "38.99.136.178/32"
+          IpProtocol: "tcp"
+          FromPort: "3389"
+          ToPort: "3389"
+        -
+          IpProtocol: "-1"
+          SourceSecurityGroupId: 
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-SGMGTID"
+          FromPort: "-1"
+          ToPort: "-1"
+        -
+          IpProtocol: "-1"
+          SourceSecurityGroupId: 
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-SGMGTVPNID"
+          FromPort: "-1"
+          ToPort: "-1"
+      VpcId: !Ref myVPC
+
+Outputs: 
+  VpcName:
+    Description: "VPC Name"
+    Value:
+      !Ref VpcName
+    Export:
+      Name: !Sub "${AWS::StackName}-VPCNAME"
+  VPCId: 
+    Description: "VPC ID"
+    Value: 
+      !Ref myVPC
+    Export:
+      Name: !Sub "${AWS::StackName}-VPCID"
+  VPCSubDBA:
+    Description: "The subnet ID to use for DB SUBNET A"
+    Value: !Ref myVPCSubDBA
+    Export: 
+      Name: !Sub "${AWS::StackName}-SUBNET-DBA"
+  VPCSubDBB:
+    Description: "The subnet ID to use for DB SUBNET B"
+    Value: !Ref myVPCSubDBB
+    Export: 
+      Name: !Sub "${AWS::StackName}-SUBNET-DBB"  
+  VPCSubWebA:
+    Description: "The subnet ID to use for WEB SUBNET A"
+    Value: !Ref myVPCSubWebA
+    Export: 
+      Name: !Sub "${AWS::StackName}-SUBNET-WEBA"
+  VPCSubWebB:
+    Description: "The subnet ID to use for WEB SUBNET B"
+    Value: !Ref myVPCSubWebB
+    Export: 
+      Name: !Sub "${AWS::StackName}-SUBNET-WEBB"
+  VPCSubPublicA:
+    Description: "The subnet ID to use for PUBLIC SUBNET A"
+    Value: !Ref myVPCSubPublicA
+    Export: 
+      Name: !Sub "${AWS::StackName}-SUBNET-PUBLICA"
+  VPCSubPublicB:
+    Description: "The subnet ID to use for PUBLIC SUBNET B"
+    Value: !Ref myVPCSubPublicB
+    Export: 
+      Name: !Sub "${AWS::StackName}-SUBNET-PUBLICB"  
+  SGDB:
+    Description: "The security group ID to use for DB Server"
+    Value:
+      !GetAtt ["mySGDB", "GroupId"]
+    Export: 
+      Name: !Sub "${AWS::StackName}-SGDB"  
+  SGCloudFlare:
+    Description: "The security group ID to use for CloudFlare Server"
+    Value:
+      !GetAtt ["mySGCloudFlare", "GroupId"]
+    Export: 
+      Name: !Sub "${AWS::StackName}-SGCloudFlare"  
+  SGCustomServer:
+    Description: "The security group ID to use for Custom Server"
+    Value:
+      !GetAtt ["mySGGenericServer", "GroupId"]
+    Export: 
+      Name: !Sub "${AWS::StackName}-SGCustomServer"
+  OpsworksServiceRole:
+    Description: "The IAM Opsworks Service Role"
+    Value: !GetAtt ["myOpsworksServiceRole", "Arn"]
+    Export:
+      Name: !Sub "${AWS::StackName}-OpsworksServiceRoleARN"  
+  DBInstanceProfile:
+    Description: "The IAM DB Instance Profile"
+    Value: !Ref "myDBInstanceProfile"
+    Export:
+      Name: !Sub "${AWS::StackName}-DBInstanceName"  
+  DBInstanceRole:
+   Description: "The IAM DB Instance Role ARN"
+   Value: !GetAtt ["myDBRole", "Arn"]
+   Export:
+      Name: !Sub "${AWS::StackName}-DBRoleARN" 

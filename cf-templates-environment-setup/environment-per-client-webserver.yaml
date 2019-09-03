@@ -1,0 +1,271 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label: 
+        default: "VPC Details"
+      Parameters: 
+      - VPCRegionStackName
+      - VPCRegionADStackName
+      - VPCGroupStackName
+      - VPCClientStackName      
+    - Label: 
+        default: "Source Control"
+      Parameters: 
+      - "DefaultSshKeyName"
+      - "ChefGitUrl"
+      - "ChefGitRevision"
+      - "GitSSHKey"
+      - "CodebaseGitRevision"
+
+    - Label: 
+        default: "Application Environment"
+      Parameters: 
+      - "Environment"
+      - "DeploymentCode"
+      - "CertPassword"
+      - "AlertLogicKey"
+Parameters:
+  VPCRegionStackName:
+    Description: "Name of a VPC Region stack that contains the management vpc networking resources."
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: "^[a-zA-Z][-a-zA-Z0-9-]*$"
+    Default: "VPC-MGT"
+  VPCRegionADStackName:
+    Description: "Name of a VPC Region stack that contains the management vpc networking resources."
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: "^[a-zA-Z][-a-zA-Z0-9-]*$"
+    Default: "VPC-MGT"
+  VPCGroupStackName:
+    Description: "Name of a VPC Group stack that contains the group networking resources."
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: "^[a-zA-Z][-a-zA-Z0-9-]*$"
+    Default: "VPC-1"
+  VPCClientStackName:
+    Description: "Name of a VPC Client stack that contains the client networking resources."
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: "^[a-zA-Z][-a-zA-Z0-9-]*$"
+    Default: "VPC-TEST"
+  DefaultSshKeyName:
+    Description: "Stack's Default SSH Key Name"
+    Default: ""
+    Type: String
+    MinLength: '1'
+    MaxLength: '255'
+  ChefGitUrl:
+    Description: "Stack's Chef Recipe Git Repo"
+    Default: "git@github.com:myrepo/myproject.git"
+    Type: String
+    MinLength: '1'
+    MaxLength: '255'
+  ChefGitRevision:
+    Description: "Stack's Chef Recipe Git Revision"
+    Default: "master"
+    Type: String
+    MinLength: '1'
+    MaxLength: '255'
+  GitSSHKey:
+    Description: "Stack's Chef Recipe Git SSH Key.  Enter the deploy key as CSV (replace newlines with commas)"
+    Type: 'CommaDelimitedList'
+    NoEcho: 'true'
+  HostnamePrefix:
+    Description: "Hostname Prefix"
+    Type: String
+    MinLength: '1'
+    MaxLength: '13'
+  Environment:
+    Default: "staging"
+    Description: "Environment"
+    AllowedValues:      
+      - "production"
+      - "staging"
+    Type: String
+    MinLength: '1'
+    MaxLength: '255'  
+  s3BaseFiles:
+    Default: build/baseline"
+    Description: Code path
+    Type: String
+    MinLength: '1'
+    MaxLength: '255'
+  s3BuildFiles:
+    Default: build/builds"
+    Description: Code path
+    Type: String
+    MinLength: '1'
+    MaxLength: '255'
+  DeploymentCode:
+    Default: "default"
+    Description: "Name of Deployment Zipfile"
+    Type: String
+    MinLength: '1'
+    MaxLength: '255'
+  CertPassword:
+    Default: "default"
+    Description: "Password for Certificates"
+    Type: String
+    MinLength: '0'
+    MaxLength: '255'
+    NoEcho: 'true'
+  AlertLogicKey:
+    Default: "default"
+    Description: "Alert Logic Key"
+    Type: String
+    MinLength: '1'
+    MaxLength: '255'
+  ClientTagName:
+    Description: "Client Name to be used for tagging"
+    Default: ""
+    Type: "String"
+    MinLength: '1'
+    MaxLength: '255'
+
+Resources:
+  myStack: # DO NOT CHANGE NAME - USED INSIDE promote-to-staging.ps1 script!
+    Type: AWS::OpsWorks::Stack
+    Properties:
+      Name: !Ref AWS::StackName
+      DefaultOs: "Microsoft Windows Server 2012 R2 Base"
+      ServiceRoleArn:
+        Fn::ImportValue: !Sub "${VPCGroupStackName}-OpsworksServiceRoleARN"
+      DefaultInstanceProfileArn: 
+        Fn::ImportValue: !Sub "${VPCClientStackName}-WebInstanceARN"
+      ConfigurationManager:
+        Name: "Chef"
+        Version: "12.2"
+      UseCustomCookbooks: 'true'
+      DefaultSshKeyName: !Ref DefaultSshKeyName
+      VpcId: 
+        Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCID"
+      DefaultSubnetId:
+        Fn::ImportValue: !Sub "${VPCGroupStackName}-SUBNET-WEBA"
+      UseOpsworksSecurityGroups: 'false'
+      CustomCookbooksSource:
+        Type: git
+        Url: !Sub "${ChefGitUrl}"
+        Revision: !Sub "${ChefGitRevision}"
+        SshKey: !Join [ "\n", !Ref GitSSHKey ]
+      Tags:
+        - Key: ":customer"
+          Value: !Ref ClientTagName
+        - Key: ":environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: ":cluster"
+          Value: !Ref VPCGroupStackName
+        - Key: "Patch Group"
+          Value: "None"
+
+  myLayer:
+    Type: AWS::OpsWorks::Layer
+    DependsOn: myApp
+    Properties:
+      CustomSecurityGroupIds:
+        - Fn::ImportValue: !Sub "${VPCClientStackName}-SGWeb"
+        - Fn::ImportValue: !Sub "${VPCGroupStackName}-SGCustomServer" # custom server sg
+      StackId: !Ref myStack
+      Type: "custom"
+      Shortname: "webserver"
+      EnableAutoHealing: 'true'
+      CustomJson: 
+        Fn::Sub:
+          - "{\"alertlogic.key\":\"${AlertLogicKey}\", \"client\": \"${ClientName}\",\"s3BaseFiles\":\"${s3BaseFiles}\", \"s3BuildFiles\":\"${s3BuildFiles}\", \"environment\":\"${Environment}\", \"vpcname\":\"${VpcName}\", \"JoinControllerDocumentName\":\"${JoinControllerDocumentName}\", \"deploymentcode\":\"${DeploymentCode}\"}"
+          - VpcName:
+              Fn::ImportValue: !Sub "${VPCGroupStackName}-VPCNAME"
+            ClientName:
+              Fn::ImportValue: !Sub "${VPCClientStackName}-ClientName"
+            AlertLogicKey: !Ref AlertLogicKey
+            Environment: !Ref Environment
+            s3BaseFiles: !Ref s3BaseFiles              
+            s3BuildFiles: !Ref s3BuildFiles              
+            DeploymentCode: !Ref DeploymentCode
+            JoinControllerDocumentName: 
+              Fn::ImportValue: !Sub "${VPCRegionADStackName}-JoinControllerDocumentName"
+      LifecycleEventConfiguration:
+        ShutdownEventConfiguration:
+          DelayUntilElbConnectionsDrained: 'true'
+          ExecutionTimeout: '60' # seconds
+      # TODO: if public ip is not set to true, this will not have access to internet
+      # and thus not setup instance properly.  Probably need to look at VPC
+      # https://forums.aws.amazon.com/thread.jspa?threadID=96369
+      AutoAssignPublicIps: 'false'
+      AutoAssignElasticIps: 'false'
+      Name: "WebServer"
+      CustomRecipes:
+        Configure:
+        - webserver::configure
+        Setup:
+        - webserver::setup
+        - alb_support::attach_to_alb
+        Deploy:
+        - webserver::deploy
+        Shutdown:
+        - alb_support::detach_from_alb
+      Tags:
+        - Key: ":customer"
+          Value: !Ref ClientTagName
+        - Key: ":environment"
+          Value:
+            Fn::ImportValue: !Sub "${VPCRegionStackName}-Environment"
+        - Key: ":cluster"
+          Value: !Ref VPCGroupStackName
+        - Key: "Patch Group"
+          Value: "None"
+
+  myInstance1: 
+    Type: "AWS::OpsWorks::Instance"
+    Properties:
+      Hostname: !Sub "${HostnamePrefix}-1"
+      SubnetId:
+        Fn::ImportValue: !Sub "${VPCGroupStackName}-SUBNET-WEBA"
+      StackId: !Ref "myStack"
+      LayerIds: 
+        - !Ref "myLayer"
+      InstanceType: "t2.medium"
+      BlockDeviceMappings:
+        -
+          DeviceName: "ROOT_DEVICE"
+          Ebs:
+            DeleteOnTermination: 'true'
+            VolumeSize: 60
+            VolumeType: 'gp2'     
+
+  myInstance2: 
+    Type: "AWS::OpsWorks::Instance"
+    Properties: 
+      Hostname: !Sub "${HostnamePrefix}-2"
+      AutoScalingType: "load"
+      SubnetId:
+        Fn::ImportValue: !Sub "${VPCGroupStackName}-SUBNET-WEBB"
+      StackId: !Ref "myStack"
+      LayerIds: 
+        - !Ref "myLayer"
+      InstanceType: "t2.medium"
+      BlockDeviceMappings:
+        -
+          DeviceName: "ROOT_DEVICE"
+          Ebs:
+            DeleteOnTermination: 'true'
+            VolumeSize: 60
+            VolumeType: 'gp2'      
+
+  myApp: # DO NOT CHANGE NAME - USED INSIDE promote-to-staging.ps1 script!
+    Type: AWS::OpsWorks::App
+    Properties:
+      StackId: !Ref myStack
+      Type: other
+      Name: "Stage"
+      AppSource:
+        Type: other
+      Environment:
+        - Key: "CertPassword"
+          Secure: true
+          Value: !Ref CertPassword      
