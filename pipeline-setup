@@ -1,0 +1,10 @@
+Using the following yaml as reference, AWS Code pipeline can be setup which takes github as the source repo, build and deploy the code directly to AWS Web Servers..
+https://docs.aws.amazon.com/code-samples/latest/catalog/cloudformation-codepipeline-template-codepipeline-github-events-yaml.yml.html
+
+Yaml based pipeline helps in adding the file to repo and maintaining version control instead of setting up the pipeline using UI. 
+
+The artifacts generated after build can be saved to S3 to maintain durable storage if the need to redeploy previous release (in this case 90 days) is required.
+
+Cloudfront setup is required to redirect all http traffic to https and also for reduced latency (which avoids pulling in data from S3 everytime instead)
+More details here:
+https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-https-viewers-to-cloudfront.html
